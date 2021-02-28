@@ -2,6 +2,7 @@ package io.siggi.minecartloader;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Minecart;
 import org.bukkit.entity.minecart.CommandMinecart;
 import org.bukkit.entity.minecart.ExplosiveMinecart;
@@ -104,5 +105,51 @@ public class Util {
 			}
 		}
 		return false;
+	}
+
+	public static BlockFace getDirection(Vector vector) {
+		double x = vector.getX();
+		double z = vector.getZ();
+		if (x == 0) {
+			if (z < 0) {
+				return BlockFace.NORTH;
+			} else if (z > 0) {
+				return BlockFace.SOUTH;
+			} else {
+				return BlockFace.SELF;
+			}
+		}
+		if (z == 0) {
+			if (x < 0) {
+				return BlockFace.WEST;
+			} else if (x > 0) {
+				return BlockFace.EAST;
+			} else {
+				// unreachable
+				return BlockFace.SELF;
+			}
+		}
+		double angle = Math.atan2(z, x) * 180.0 / Math.PI;
+		angle -= 270.0;
+		while (angle < 0.0) angle += 360.0;
+		if (angle >= 337.5) {
+			return BlockFace.NORTH;
+		} else if (angle >= 292.5) {
+			return BlockFace.NORTH_WEST;
+		} else if (angle >= 247.5) {
+			return BlockFace.WEST;
+		} else if (angle >= 202.5) {
+			return BlockFace.SOUTH_WEST;
+		} else if (angle >= 157.5) {
+			return BlockFace.SOUTH;
+		} else if (angle >= 112.5) {
+			return BlockFace.SOUTH_EAST;
+		} else if (angle >= 67.5) {
+			return BlockFace.EAST;
+		} else if (angle >= 22.5) {
+			return BlockFace.NORTH_EAST;
+		} else {
+			return BlockFace.NORTH;
+		}
 	}
 }

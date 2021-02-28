@@ -22,7 +22,7 @@ public class FindMinecartCommand implements CommandExecutor {
 			if (name != null && name.equals(minecartName)) {
 				Block block = minecart.getLocation().getBlock();
 				String uuid = minecart.getUniqueId().toString().substring(0, 8);
-				sender.sendMessage(uuid + ": " + block.getX() + "," + block.getY() + "," + block.getZ());
+				sender.sendMessage(uuid + ": " + block.getX() + "," + block.getY() + "," + block.getZ() + "," + Util.getDirection(minecart.getVelocity()).toString());
 			}
 		}
 		return true;
