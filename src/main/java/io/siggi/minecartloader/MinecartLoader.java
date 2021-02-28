@@ -1,21 +1,24 @@
 package io.siggi.minecartloader;
 
+import io.siggi.minecartloader.controlsign.*;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.block.*;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Sign;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.WallSign;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Minecart;
-import org.bukkit.entity.minecart.*;
+import org.bukkit.entity.minecart.HopperMinecart;
+import org.bukkit.entity.minecart.RideableMinecart;
+import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockRedstoneEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 
@@ -23,25 +26,41 @@ import java.util.*;
 
 public class MinecartLoader extends JavaPlugin implements Listener {
 
-	@Override
-	public void onEnable() {
-		getServer().getPluginManager().registerEvents(this, this);
-		getServer().getScheduler().runTaskTimer(this, this::tick, 1L, 1L);
-		getCommand("findminecart").setExecutor(new FindMinecartCommand(this));
-	}
-
+	private final Map<String, ControlSignHandler> controlSignHandlers = new HashMap<>();
 	private final Vector zeroVelocity = new Vector(0.0, 0.0, 0.0);
-	private final Map<Minecart, Vector> savedVelocity = new HashMap<>();
-	private final Set<Minecart> queuingEnabled = new HashSet<>();
-
+	private final Map<Minecart, MinecartMetadata> minecartMetadataMap = new HashMap<>();
 	private final SingleFile singleFile = new SingleFile();
-
 	private final List<BlockFace> allDirections = Collections.unmodifiableList(Arrays.asList(new BlockFace[]{
 			BlockFace.NORTH,
 			BlockFace.SOUTH,
 			BlockFace.WEST,
 			BlockFace.EAST
 	}));
+	private final Set<Chunk> currentlyKeptLoaded = new HashSet<>();
+	private Block lastRailSearched = null;
+	private LinkedList<Sign> lastSigns = null;
+
+	@Override
+	public void onEnable() {
+		getServer().getPluginManager().registerEvents(this, this);
+		getServer().getScheduler().runTaskTimer(this, this::tick, 1L, 1L);
+
+		getCommand("findminecart").setExecutor(new FindMinecartCommand(this));
+
+		controlSignHandlers.put("setname", new SetNameSign());
+		controlSignHandlers.put("setblock", new SetBlockSign());
+		controlSignHandlers.put("dropcart", new DropCartSign());
+		controlSignHandlers.put("queue", new QueueSign());
+		controlSignHandlers.put("weight", new WeightSign());
+		controlSignHandlers.put("boost", new BoostSign());
+		controlSignHandlers.put("slowdown", new SlowdownSign());
+		controlSignHandlers.put("oneway", new OneWaySign());
+		controlSignHandlers.put("singlefile", new SingleFileSign(singleFile));
+		controlSignHandlers.put("dropoff", new DropOffSign());
+		controlSignHandlers.put("pickup", new PickupSign());
+		controlSignHandlers.put("turnif", new TurnConditionalSign(false));
+		controlSignHandlers.put("turnifnot", new TurnConditionalSign(true));
+	}
 
 	LinkedList<Minecart> getAllMinecarts() {
 		LinkedList<Minecart> minecarts = new LinkedList<>();
@@ -54,19 +73,28 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 	private void tick() {
 		singleFile.tick();
 		Set<Chunk> keepLoaded = new HashSet<>();
-		savedVelocity.keySet().removeIf(m -> !m.isValid());
-		queuingEnabled.removeIf(m -> !m.isValid());
 		LinkedList<Minecart> minecarts = getAllMinecarts();
+		minecarts.removeIf(m -> minecartMetadataMap.containsKey(m));
 		for (Minecart minecart : minecarts) {
-			boolean currentlyStopped = false;
-			Vector velocity = minecart.getVelocity();
-			if (!isZeroVelocity(velocity)) {
-				savedVelocity.remove(minecart);
-			} else if (!savedVelocity.containsKey(minecart)) {
+			minecartMetadataMap.put(minecart, new MinecartMetadata(minecart));
+		}
+		for (Iterator<Map.Entry<Minecart, MinecartMetadata>> it = minecartMetadataMap.entrySet().iterator(); it.hasNext(); ) {
+			Map.Entry<Minecart, MinecartMetadata> set = it.next();
+			Minecart minecart = set.getKey();
+			MinecartMetadata metadata = set.getValue();
+			if (!minecart.isValid()) {
+				it.remove();
+				continue;
+			}
+			metadata.preTick();
+			Vector velocity = metadata.velocity = minecart.getVelocity();
+			if (!Util.isZeroVelocity(velocity)) {
+				metadata.savedVelocity = null;
+			} else if (metadata.savedVelocity == null) {
 				continue;
 			} else {
-				currentlyStopped = true;
-				velocity = savedVelocity.get(minecart);
+				metadata.stopped = true;
+				velocity = metadata.velocity = metadata.savedVelocity;
 			}
 			Location location = minecart.getLocation();
 			Chunk chunk = location.getChunk();
@@ -79,163 +107,17 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 				}
 			}
 			Block block = location.getBlock();
-			Sign queueControlSign = getControlSign(block, "queue");
-			boolean queueOnce = false;
-			if (queueControlSign != null) {
-				String line = queueControlSign.getLine(1);
-				if (line.isEmpty()) {
-					queueOnce = true;
-				} else {
-					boolean enable = line.equals("1") || line.equals("on") || line.equals("yes");
-					if (enable) {
-						queuingEnabled.add(minecart);
-					} else {
-						queuingEnabled.remove(minecart);
-					}
+			List<Sign> controlSigns = getControlSigns(block);
+			for (Sign sign : controlSigns) {
+				String command = sign.getLine(0).substring(5);
+				ControlSignHandler handler = controlSignHandlers.get(command);
+				if (handler != null) {
+					handler.handle(minecart, metadata, sign);
 				}
 			}
-			Sign dropMinecartSign = getControlSign(block, "dropcart");
-			if (dropMinecartSign != null) {
-				ItemStack minecartItem = getItem(minecart);
-				List<ItemStack> inventoryItems = getInventoryItems(minecart);
-				minecart.remove();
-				location.getWorld().dropItem(location, minecartItem);
-				for (ItemStack stack : inventoryItems) {
-					location.getWorld().dropItem(location, stack);
-				}
-				continue;
-			}
-			Sign setNameSign = getControlSign(block, "setname");
-			if (setNameSign != null) {
-				String name = setNameSign.getLine(1);
-				if (name.isEmpty()) {
-					minecart.setCustomName(null);
-				} else {
-					minecart.setCustomName(name);
-				}
-			}
-			Sign setBlockSign = getControlSign(block, "setblock");
-			if (setBlockSign != null) {
-				String blockName = setBlockSign.getLine(1);
-				if (blockName.isEmpty()) {
-					minecart.setDisplayBlockData(null);
-				} else {
-					try {
-						Material material = Material.valueOf(blockName.toUpperCase());
-						BlockData blockData = material.createBlockData();
-						minecart.setDisplayBlockData(blockData);
-					} catch (Exception e) {
-					}
-				}
-			}
-			Sign boosterSign = getControlSign(block, "boost");
-			if (boosterSign != null && !currentlyStopped) {
-				Vector newVelocity = new Vector(
-						max(velocity.getX(), 0.7),
-						max(velocity.getY(), 0.7),
-						max(velocity.getZ(), 0.7)
-				);
-				minecart.setVelocity(newVelocity);
-				velocity = newVelocity;
-				String line = boosterSign.getLine(1).trim().toLowerCase().replace(" ", "");
-				switch (line) {
-					case "heavy":
-						minecart.setSlowWhenEmpty(false);
-						break;
-					case "light":
-						minecart.setSlowWhenEmpty(true);
-						break;
-				}
-			}
-			Sign slowDownSign = getControlSign(block, "slowdown");
-			if (slowDownSign != null && !currentlyStopped) {
-				Vector newVelocity = new Vector(
-						min(velocity.getX(), 0.1),
-						min(velocity.getY(), 0.1),
-						min(velocity.getZ(), 0.1)
-				);
-				minecart.setVelocity(newVelocity);
-				velocity = newVelocity;
-				String line = slowDownSign.getLine(1).trim().toLowerCase().replace(" ", "");
-				switch (line) {
-					case "heavy":
-						minecart.setSlowWhenEmpty(false);
-						break;
-					case "light":
-						minecart.setSlowWhenEmpty(true);
-						break;
-				}
-			}
-			Sign oneWaySign = getControlSign(block, "oneway");
-			if (oneWaySign != null) {
-				boolean bounce = false;
-				String line = oneWaySign.getLine(1).trim().toLowerCase().replace(" ", "");
-				switch (line) {
-					case "north":
-						if (velocity.getZ() > 0)
-							bounce = true;
-						break;
-					case "south":
-						if (velocity.getZ() < 0)
-							bounce = true;
-						break;
-					case "west":
-						if (velocity.getX() > 0)
-							bounce = true;
-						break;
-					case "east":
-						if (velocity.getX() < 0)
-							bounce = true;
-						break;
-				}
-				if (bounce) {
-					velocity = velocity.multiply(-1.0);
-					minecart.setVelocity(velocity);
-				}
-			}
-			boolean forceStop = false;
-			Sign singleFileSign = getControlSign(block, "singlefile");
-			if (singleFileSign != null) {
-				String trackName = singleFileSign.getLine(1).toLowerCase().trim().replace(" ", "");
-				if (trackName.equals("release")) {
-					singleFile.releaseMinecart(minecart);
-				} else if (!singleFile.trackMinecart(minecart, singleFileSign, trackName)) {
-					forceStop = true;
-				}
-			}
-			Sign dropOffSign = getControlSign(block, "dropoff");
-			if (dropOffSign != null && block.getRelative(BlockFace.DOWN).getType() == Material.HOPPER) {
-				Inventory inventory = null;
-				if (minecart instanceof StorageMinecart) {
-					inventory = ((StorageMinecart) minecart).getInventory();
-				} else if (minecart instanceof HopperMinecart) {
-					inventory = ((HopperMinecart) minecart).getInventory();
-				}
-				if (inventory != null && !inventory.isEmpty()) {
-					forceStop = true;
-				}
-			}
-			Sign pickUpSign = getControlSign(block, "pickup");
-			if (pickUpSign != null) {
-				Block above = block.getRelative(BlockFace.UP);
-				if (above.getType() == Material.HOPPER) {
-					Inventory inventory = null;
-					if (minecart instanceof StorageMinecart) {
-						inventory = ((StorageMinecart) minecart).getInventory();
-					} else if (minecart instanceof HopperMinecart) {
-						inventory = ((HopperMinecart) minecart).getInventory();
-					}
-					if (inventory != null) {
-						Inventory aboveInventory = ((Hopper) above.getState()).getInventory();
-						if (!aboveInventory.isEmpty() && inventory.firstEmpty() != -1) {
-							forceStop = true;
-						}
-					}
-				}
-			}
-			if (queuingEnabled.contains(minecart) || queueOnce || forceStop) {
+			if (metadata.queueing || metadata.queueThisTick || metadata.stopThisTick) {
 				boolean queueBlocked = false;
-				if (forceStop) {
+				if (metadata.stopThisTick) {
 					queueBlocked = true;
 				} else {
 					double searchX = 0.0;
@@ -256,61 +138,19 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 						queueBlocked = true;
 					}
 				}
-				if (currentlyStopped && !queueBlocked) {
+				if (metadata.stopped && !queueBlocked) {
 					minecart.setVelocity(velocity.multiply(0.8));
-					savedVelocity.remove(minecart);
-				} else if (!currentlyStopped && queueBlocked) {
+					metadata.savedVelocity = null;
+				} else if (!metadata.stopped && queueBlocked) {
 					minecart.setVelocity(zeroVelocity);
-					savedVelocity.put(minecart, velocity);
+					metadata.savedVelocity = velocity;
 				}
-			} else if (currentlyStopped && velocity != null) {
+			} else if (metadata.stopped && velocity != null) {
 				minecart.setVelocity(velocity);
 			}
 		}
 		updateLoaded(keepLoaded);
 	}
-
-	private ItemStack getItem(Minecart minecart) {
-		Material material;
-		if (minecart instanceof CommandMinecart) {
-			material = Material.COMMAND_BLOCK_MINECART;
-		} else if (minecart instanceof StorageMinecart) {
-			material = Material.CHEST_MINECART;
-		} else if (minecart instanceof ExplosiveMinecart) {
-			material = Material.TNT_MINECART;
-		} else if (minecart instanceof HopperMinecart) {
-			material = Material.HOPPER_MINECART;
-		} else {
-			material = Material.MINECART;
-		}
-		ItemStack stack = new ItemStack(material, 1);
-		String name = minecart.getCustomName();
-		if (name != null) {
-			ItemMeta meta = stack.getItemMeta();
-			meta.setDisplayName(name);
-			stack.setItemMeta(meta);
-		}
-		return stack;
-	}
-
-	private List<ItemStack> getInventoryItems(Minecart minecart) {
-		List<ItemStack> items = new ArrayList<>(27);
-		Inventory inventory = null;
-		if (minecart instanceof StorageMinecart) {
-			inventory = ((StorageMinecart) minecart).getInventory();
-		} else if (minecart instanceof HopperMinecart) {
-			inventory = ((HopperMinecart) minecart).getInventory();
-		}
-		if (inventory == null) return items;
-		for (ItemStack stack : inventory.getContents()) {
-			if (stack != null && stack.getType() != Material.AIR) {
-				items.add(stack);
-			}
-		}
-		return items;
-	}
-
-	private final Set<Chunk> currentlyKeptLoaded = new HashSet<>();
 
 	private void updateLoaded(Set<Chunk> newSet) {
 		Set<Chunk> toRemove = new HashSet<>();
@@ -327,30 +167,6 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 		for (Chunk chunk : newChunks) {
 			chunk.addPluginChunkTicket(this);
 		}
-	}
-
-	private double max(double value, double maxAmount) {
-		if (value < 0) {
-			return -maxAmount;
-		} else if (value > 0) {
-			return maxAmount;
-		} else {
-			return 0;
-		}
-	}
-
-	private double min(double value, double maxAmount) {
-		if (value < 0) {
-			return Math.max(value, -maxAmount);
-		} else if (value > 0) {
-			return Math.min(value, maxAmount);
-		} else {
-			return 0;
-		}
-	}
-
-	private boolean isZeroVelocity(Vector vector) {
-		return vector.getX() == 0.0 && vector.getY() == 0.0 && vector.getZ() == 0.0;
 	}
 
 	@EventHandler
@@ -419,15 +235,12 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 			return signs.get(0);
 		}
 		for (Sign sign : getControlSigns(rail)) {
-			if (sign.getLine(0).toLowerCase().equals(firstLine)) {
+			if (Util.canonicalize(sign.getLine(0), false).equals("cart:" + firstLine)) {
 				return sign;
 			}
 		}
 		return null;
 	}
-
-	private Block lastRailSearched = null;
-	private LinkedList<Sign> lastSigns = null;
 
 	private List<Sign> getControlSigns(Block rail) {
 		if (lastRailSearched != null && lastRailSearched.equals(rail)) {
@@ -449,6 +262,7 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 		BlockState state = block.getState();
 		if (!(state instanceof Sign)) return;
 		Sign sign = (Sign) state;
+		if (!Util.canonicalize(sign.getLine(0), false).startsWith("cart:")) return;
 		if (attached != null) {
 			BlockData blockData = sign.getBlockData();
 			if (blockData instanceof WallSign) {

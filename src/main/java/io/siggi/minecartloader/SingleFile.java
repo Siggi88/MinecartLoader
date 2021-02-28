@@ -10,12 +10,11 @@ import java.util.Map;
 import java.util.Set;
 
 public class SingleFile {
-	SingleFile() {
-	}
-
 	private final Map<Minecart, String> singleFileMinecarts = new HashMap<>();
 	private final Map<String, Set<Minecart>> singleFileTracks = new HashMap<>();
 	private final Map<String, Block> singleFileSigns = new HashMap<>();
+	SingleFile() {
+	}
 
 	public void tick() {
 		Set<Minecart> toRemove = new HashSet<>();
