@@ -147,7 +147,9 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 					metadata.savedVelocity = null;
 				} else if (!metadata.stopped && queueBlocked) {
 					minecart.setVelocity(zeroVelocity);
-					metadata.savedVelocity = velocity;
+					if (metadata.savedVelocity == null) {
+						metadata.savedVelocity = velocity;
+					}
 				}
 			} else if (metadata.stopped && velocity != null) {
 				minecart.setVelocity(velocity);
