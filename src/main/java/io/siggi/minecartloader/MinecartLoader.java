@@ -126,18 +126,36 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 				} else {
 					double searchX = 0.0;
 					double searchZ = 0.0;
+					double searchXDistance = 0.5;
+					double searchZDistance = 0.5;
 					if (velocity.getX() < 0.0) {
 						searchX -= 2.0;
+						searchXDistance = 2.0;
 					} else if (velocity.getX() > 0.0) {
 						searchX += 2.0;
+						searchXDistance = 2.0;
 					}
 					if (velocity.getZ() < 0.0) {
 						searchZ -= 2.0;
+						searchZDistance = 2.0;
 					} else if (velocity.getZ() > 0.0) {
 						searchZ += 2.0;
+						searchZDistance = 2.0;
 					}
 					Location searchLocation = new Location(world, location.getX() + searchX, location.getY(), location.getZ() + searchZ);
-					Collection<Entity> nearby = world.getNearbyEntities(searchLocation, 2.0, 2.0, 2.0, e -> e != minecart && e instanceof Minecart);
+					Collection<Entity> nearby = world.getNearbyEntities(searchLocation,
+							searchXDistance, 2.0, searchZDistance,
+							e -> {
+								if (e == minecart || !(e instanceof Minecart)) return false;
+								Minecart otherMinecart = (Minecart) e;
+								MinecartMetadata otherMetadata = minecartMetadataMap.get(otherMinecart);
+								if (otherMetadata == null) return true;
+								Vector otherVelocity = otherMetadata.savedVelocity == null
+										? otherMinecart.getVelocity()
+										: otherMetadata.savedVelocity;
+								return !Util.areOppositeDirections(metadata.velocity, otherVelocity);
+							}
+					);
 					if (!nearby.isEmpty()) {
 						queueBlocked = true;
 					}

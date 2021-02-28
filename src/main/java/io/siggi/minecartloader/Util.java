@@ -107,6 +107,13 @@ public class Util {
 		return false;
 	}
 
+	public static boolean areOppositeDirections(Vector a, Vector b) {
+		return ((a.getX() > 0 && b.getX() < 0)
+				|| (a.getX() < 0 && b.getX() > 0)
+				|| (b.getZ() > 0 && b.getZ() < 0)
+				|| (b.getZ() < 0 && b.getZ() > 0));
+	}
+
 	public static BlockFace getDirection(Vector vector) {
 		double x = vector.getX();
 		double z = vector.getZ();
