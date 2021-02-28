@@ -62,6 +62,7 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 		controlSignHandlers.put("singlefile", new SingleFileSign(singleFile));
 		controlSignHandlers.put("dropoff", new DropOffSign());
 		controlSignHandlers.put("pickup", new PickupSign());
+		controlSignHandlers.put("turn", new TurnSign());
 		controlSignHandlers.put("turnif", new TurnConditionalSign(false));
 		controlSignHandlers.put("turnifnot", new TurnConditionalSign(true));
 	}

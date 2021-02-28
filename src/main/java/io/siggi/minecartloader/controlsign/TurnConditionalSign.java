@@ -15,64 +15,11 @@ import org.bukkit.entity.minecart.RideableMinecart;
 import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.inventory.Inventory;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 
-public class TurnConditionalSign extends ControlSignHandler {
-	private static final Set<Material> RAILS;
-	private static final Set<Rail.Shape> CONNECTS_NORTH;
-	private static final Set<Rail.Shape> CONNECTS_SOUTH;
-	private static final Set<Rail.Shape> CONNECTS_EAST;
-	private static final Set<Rail.Shape> CONNECTS_WEST;
+import static io.siggi.minecartloader.controlsign.TurnSign.*;
 
-	static {
-		Set<Material> rails = new HashSet<>();
-		rails.addAll(Arrays.asList(new Material[]{
-				Material.RAIL,
-				Material.POWERED_RAIL,
-				Material.DETECTOR_RAIL,
-				Material.ACTIVATOR_RAIL
-		}));
-		RAILS = Collections.unmodifiableSet(rails);
-		Set<Rail.Shape> connectsNorth = new HashSet<>();
-		connectsNorth.addAll(Arrays.asList(new Rail.Shape[]{
-				Rail.Shape.NORTH_SOUTH,
-				Rail.Shape.NORTH_EAST,
-				Rail.Shape.NORTH_WEST,
-				Rail.Shape.ASCENDING_NORTH,
-				Rail.Shape.ASCENDING_SOUTH
-		}));
-		CONNECTS_NORTH = Collections.unmodifiableSet(connectsNorth);
-		Set<Rail.Shape> connectsSouth = new HashSet<>();
-		connectsSouth.addAll(Arrays.asList(new Rail.Shape[]{
-				Rail.Shape.NORTH_SOUTH,
-				Rail.Shape.SOUTH_EAST,
-				Rail.Shape.SOUTH_WEST,
-				Rail.Shape.ASCENDING_NORTH,
-				Rail.Shape.ASCENDING_SOUTH
-		}));
-		CONNECTS_SOUTH = Collections.unmodifiableSet(connectsSouth);
-		Set<Rail.Shape> connectsEast = new HashSet<>();
-		connectsEast.addAll(Arrays.asList(new Rail.Shape[]{
-				Rail.Shape.EAST_WEST,
-				Rail.Shape.NORTH_EAST,
-				Rail.Shape.SOUTH_EAST,
-				Rail.Shape.ASCENDING_EAST,
-				Rail.Shape.ASCENDING_WEST
-		}));
-		CONNECTS_EAST = Collections.unmodifiableSet(connectsEast);
-		Set<Rail.Shape> connectsWest = new HashSet<>();
-		connectsWest.addAll(Arrays.asList(new Rail.Shape[]{
-				Rail.Shape.EAST_WEST,
-				Rail.Shape.NORTH_WEST,
-				Rail.Shape.SOUTH_WEST,
-				Rail.Shape.ASCENDING_EAST,
-				Rail.Shape.ASCENDING_WEST
-		}));
-		CONNECTS_WEST = Collections.unmodifiableSet(connectsWest);
-	}
+public class TurnConditionalSign extends ControlSignHandler {
 
 	private final boolean not;
 
@@ -215,35 +162,5 @@ public class TurnConditionalSign extends ControlSignHandler {
 		}
 		if (not) conditionPasses = !conditionPasses;
 		setShape(trackAhead, conditionPasses ? shapeOnConditionPass : shapeOnConditionFail);
-	}
-
-	private Block findTrack(Block block, Set<Rail.Shape> allowedShapes) {
-		if (!RAILS.contains(block.getType())) {
-			block = block.getRelative(BlockFace.DOWN);
-			if (!RAILS.contains(block.getType())) {
-				block = null;
-			}
-		}
-		if (block != null && !allowedShapes.contains(getShape(block))) {
-			block = null;
-		}
-		return block;
-	}
-
-	private Rail.Shape getShape(Block block) {
-		try {
-			return ((Rail) block.getBlockData()).getShape();
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	private void setShape(Block block, Rail.Shape shape) {
-		try {
-			Rail rail = (Rail) block.getBlockData();
-			rail.setShape(shape);
-			block.setBlockData(rail);
-		} catch (Exception e) {
-		}
 	}
 }
