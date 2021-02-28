@@ -90,4 +90,19 @@ public class Util {
 	public static boolean isZeroVelocity(Vector vector) {
 		return vector.getX() == 0.0 && vector.getY() == 0.0 && vector.getZ() == 0.0;
 	}
+
+	public static boolean haveSpaceToInsert(Inventory inventory, ItemStack item) {
+		int maxStackSize = item.getType().getMaxStackSize();
+		for (ItemStack slot : inventory.getContents()) {
+			if (slot == null || slot.getType() == Material.AIR) {
+				return true;
+			}
+			if (slot.isSimilar(item)) {
+				if (slot.getAmount() < maxStackSize) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 }

@@ -1,5 +1,6 @@
 package io.siggi.minecartloader;
 
+import org.bukkit.block.Block;
 import org.bukkit.entity.Minecart;
 import org.bukkit.util.Vector;
 
@@ -14,6 +15,11 @@ public class MinecartMetadata {
 	public Vector savedVelocity = null;
 	public Vector velocity = null;
 
+	public Block block = null;
+
+	public Block pickupSign = null;
+	public int pickupTime = 0;
+
 	public MinecartMetadata(Minecart minecart) {
 		this.minecart = minecart;
 	}
@@ -23,6 +29,17 @@ public class MinecartMetadata {
 		queueThisTick = false;
 		stopThisTick = false;
 		stopped = false;
+		if (!minecart.isValid()) return;
+		Block currentBlock = minecart.getLocation().getBlock();
+		if (block == null || !currentBlock.equals(block)) {
+			block = currentBlock;
+			resetLocationBasedState();
+		}
+	}
+
+	private void resetLocationBasedState() {
+		this.pickupSign = null;
+		this.pickupTime = 0;
 	}
 
 	public boolean isValid() {

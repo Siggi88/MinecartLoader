@@ -17,8 +17,12 @@ import org.bukkit.entity.minecart.HopperMinecart;
 import org.bukkit.entity.minecart.RideableMinecart;
 import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockRedstoneEvent;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 
@@ -166,6 +170,21 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 		}
 		for (Chunk chunk : newChunks) {
 			chunk.addPluginChunkTicket(this);
+		}
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void itemMovedEvent(InventoryMoveItemEvent event) {
+		Inventory inventory = event.getDestination();
+		InventoryHolder holder = inventory.getHolder();
+		if (!(holder instanceof StorageMinecart || holder instanceof HopperMinecart)) {
+			return;
+		}
+		Minecart minecart = (Minecart) holder;
+		MinecartMetadata metadata = minecartMetadataMap.get(minecart);
+		if (metadata == null) return;
+		if (Util.haveSpaceToInsert(inventory, event.getItem())) {
+			metadata.pickupTime = 20;
 		}
 	}
 
