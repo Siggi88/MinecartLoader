@@ -130,18 +130,18 @@ public class MinecartLoader extends JavaPlugin implements Listener {
 					double searchXDistance = 0.5;
 					double searchZDistance = 0.5;
 					if (velocity.getX() < 0.0) {
-						searchX -= 2.0;
-						searchXDistance = 2.0;
+						searchX -= 1.0;
+						searchXDistance = 1.0;
 					} else if (velocity.getX() > 0.0) {
-						searchX += 2.0;
-						searchXDistance = 2.0;
+						searchX += 1.0;
+						searchXDistance = 1.0;
 					}
 					if (velocity.getZ() < 0.0) {
-						searchZ -= 2.0;
-						searchZDistance = 2.0;
+						searchZ -= 1.0;
+						searchZDistance = 1.0;
 					} else if (velocity.getZ() > 0.0) {
-						searchZ += 2.0;
-						searchZDistance = 2.0;
+						searchZ += 1.0;
+						searchZDistance = 1.0;
 					}
 					Location searchLocation = new Location(world, location.getX() + searchX, location.getY(), location.getZ() + searchZ);
 					Collection<Entity> nearby = world.getNearbyEntities(searchLocation,
